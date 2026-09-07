@@ -1,14 +1,28 @@
 package com.gautier7799.watchfacelab
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.animateColorAsState
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -26,10 +40,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -39,6 +58,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 class MainActivity : ComponentActivity() {
@@ -48,7 +68,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme(
-                    primary = Color(0xFF90CAF9),
+                    primary = Color(0xFF7CA7F5),
                     secondary = Color(0xFFA5D6A7),
                     tertiary = Color(0xFFFFCC80),
                     background = Color(0xFF0C0E12),
@@ -70,7 +90,7 @@ class MainActivity : ComponentActivity() {
 }
 
 // -------------------------------------------------------------
-// النماذج والأنماط (Enums & Presets)
+// Models, Enums & Presets
 // -------------------------------------------------------------
 
 enum class HandsStyle(val title: String, val desc: String) {
@@ -82,23 +102,31 @@ enum class HandsStyle(val title: String, val desc: String) {
     MINIMAL_NEEDLE("Minimal Needle", "إبر نحيفة وفائقة الأناقة")
 }
 
-enum class WatchPhotoTheme(val title: String, val colors: List<Color>) {
-    OLED_DEEP("OLED عميق نقي", listOf(Color(0xFF000000), Color(0xFF0A0C10))),
-    SPACE_NEBULA("سديم الفضاء (Nebula)", listOf(Color(0xFF1A0B2E), Color(0xFF3B1566), Color(0xFF0F2042))),
-    CYBER_AURORA("أورورا الشفق (Aurora)", listOf(Color(0xFF052B28), Color(0xFF0D524A), Color(0xFF1A2639))),
-    SUNSET_HORIZON("غروب الشمس الذهبي", listOf(Color(0xFF33140F), Color(0xFF662215), Color(0xFF1E1715))),
-    CARBON_MATRIX("ألياف الكربون الرياضية", listOf(Color(0xFF111317), Color(0xFF1C2028), Color(0xFF0A0B0E))),
-    MINIMAL_MONO("رمادي رخامي أنيق", listOf(Color(0xFF26282E), Color(0xFF18191D), Color(0xFF0D0E10)))
+enum class TicksStyle(val title: String, val desc: String, val count: Int) {
+    NONE("بدون خطوط (Clean)", "شاشة ناعمة بدون أي خطوط", 0),
+    CARDINAL_4("4 خطوط رئيسية", "خطوط عند 12, 3, 6, 9 فقط", 4),
+    HOURS_12("12 خطاً (الساعات)", "علامة لكل ساعة بدقة متناهية", 12),
+    DETAILED_60("60 خطاً (الدقائق)", "خطوط كاملة لجميع الدقائق والساعات", 60)
 }
 
-enum class ComplicationType(val label: String, val icon: ImageVector) {
-    NONE("محذوف / فارغ", Icons.Default.Close),
-    BATTERY("البطارية 🔋", Icons.Default.Send),
-    WEATHER("الطقس ☀️", Icons.Default.ThumbUp),
-    DATE("التاريخ 📅", Icons.Default.DateRange),
-    STEPS("الخطوات 👣", Icons.Default.Place),
-    HEART_RATE("نبض القلب ❤️", Icons.Default.Favorite)
+enum class ComplicationType(val id: String, val label: String, val value: String, val iconEmoji: String) {
+    BATTERY("battery", "البطارية", "85%", "🔋"),
+    WEATHER("weather", "الطقس", "24°C", "☀️"),
+    DATE("date", "التاريخ", "TODAY", "📅"),
+    STEPS("steps", "الخطوات", "8,450", "👣"),
+    HEART_RATE("heart", "النبض", "72 bpm", "❤️"),
+    CALORIES("calories", "السعرات", "520 kcal", "🔥"),
+    SUNRISE("sunrise", "الشروق", "06:12 AM", "🌅"),
+    ALARM("alarm", "المنبه", "07:00 AM", "⏰"),
+    MOON("moon", "القمر", "بدر", "🌕")
 }
+
+data class ActiveWidget(
+    val id: String,
+    val type: ComplicationType,
+    val offsetX: Float,
+    val offsetY: Float
+)
 
 data class ThemeColorOption(
     val name: String,
@@ -117,33 +145,71 @@ val MaterialYouThemes = listOf(
     ThemeColorOption("Pure White", Color(0xFFFFFFFF), Color(0xFF33353A), Color(0xFFFFFFFF))
 )
 
+fun loadBitmapFromUri(context: Context, uri: Uri): Bitmap? {
+    return try {
+        context.contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream)
+        }
+    } catch (e: Exception) {
+        null
+    }
+}
+
 // -------------------------------------------------------------
-// الشاشة الرئيسية
+// التطبيق الرئيسي
 // -------------------------------------------------------------
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PixelAnalogStudioProApp() {
-    var selectedPhotoTheme by remember { mutableStateOf(WatchPhotoTheme.OLED_DEEP) }
-    var photoOpacity by remember { mutableFloatStateOf(0.95f) }
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    var customImageUri by remember { mutableStateOf<Uri?>(null) }
+    var customBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+    var photoOpacity by remember { mutableFloatStateOf(1.0f) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            customImageUri = uri
+            val loaded = loadBitmapFromUri(context, uri)
+            if (loaded != null) {
+                customBitmap = loaded.asImageBitmap()
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("📸 تم تحميل وتطبيق خلفية الواجهة من الهاتف بنجاح!")
+                }
+            } else {
+                Toast.makeText(context, "تعذر قراءة الصورة", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    var selectedTicksStyle by remember { mutableStateOf(TicksStyle.HOURS_12) }
+    var ticksColor by remember { mutableStateOf(Color.White) }
+    var ticksOpacity by remember { mutableFloatStateOf(0.7f) }
+
+    var currentTheme by remember { mutableStateOf(MaterialYouThemes[0]) }
 
     var selectedHandsStyle by remember { mutableStateOf(HandsStyle.PIXEL_BATON) }
     var handsColor by remember { mutableStateOf(Color.White) }
     var secondHandColor by remember { mutableStateOf(MaterialYouThemes[0].primary) }
     var handsOpacity by remember { mutableFloatStateOf(1.0f) }
 
-    var currentTheme by remember { mutableStateOf(MaterialYouThemes[0]) }
-
-    var topSlot by remember { mutableStateOf(ComplicationType.DATE) }
-    var bottomSlot by remember { mutableStateOf(ComplicationType.BATTERY) }
-    var leftSlot by remember { mutableStateOf(ComplicationType.WEATHER) }
-    var rightSlot by remember { mutableStateOf(ComplicationType.STEPS) }
+    var activeWidgets by remember {
+        mutableStateOf(
+            listOf(
+                ActiveWidget("w_date", ComplicationType.DATE, offsetX = 0f, offsetY = -78f),
+                ActiveWidget("w_batt", ComplicationType.BATTERY, offsetX = 0f, offsetY = 78f),
+                ActiveWidget("w_weather", ComplicationType.WEATHER, offsetX = -75f, offsetY = 0f),
+                ActiveWidget("w_steps", ComplicationType.STEPS, offsetX = 75f, offsetY = 0f)
+            )
+        )
+    }
     var widgetOpacity by remember { mutableFloatStateOf(0.92f) }
-
     var liveSeconds by remember { mutableStateOf(true) }
-
-    val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -153,7 +219,7 @@ fun PixelAnalogStudioProApp() {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(13.dp)
+                                .size(14.dp)
                                 .clip(CircleShape)
                                 .background(currentTheme.primary)
                         )
@@ -165,8 +231,8 @@ fun PixelAnalogStudioProApp() {
                                 fontSize = 18.sp
                             )
                             Text(
-                                "Material You • تخصيص الودجات والعقارب",
-                                fontSize = 12.sp,
+                                "تخصيص حر • اسحب الودجات لحذفها أو تحريكها",
+                                fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -195,146 +261,278 @@ fun PixelAnalogStudioProApp() {
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // معاينة شاشة الساعة التناظرية الفاخرة
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                AnalogWatchFullPreview(
-                    photoTheme = selectedPhotoTheme,
-                    photoOpacity = photoOpacity,
-                    handsStyle = selectedHandsStyle,
-                    handsColor = handsColor,
-                    secondHandColor = secondHandColor,
-                    handsOpacity = handsOpacity,
-                    theme = currentTheme,
-                    topSlot = topSlot,
-                    bottomSlot = bottomSlot,
-                    leftSlot = leftSlot,
-                    rightSlot = rightSlot,
-                    widgetOpacity = widgetOpacity,
-                    liveSeconds = liveSeconds
-                )
-            }
+            Text(
+                "💡 المس زر (×) على أي ودجت لحذفه مباشرة، أو اسحبه لتغيير مكانه بحرية!",
+                fontSize = 11.sp,
+                color = currentTheme.primary,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // 1. واجهات وخلفيات الصور الفنية
-            CardSection(title = "1. خلفيات وواجهات الصور الفنية", icon = Icons.Default.Star) {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(WatchPhotoTheme.values()) { photo ->
-                        val isSelected = selectedPhotoTheme == photo
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .clickable { selectedPhotoTheme = photo }
-                                .background(if (isSelected) currentTheme.primary.copy(alpha = 0.15f) else Color.Transparent)
-                                .padding(8.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(54.dp)
-                                    .clip(CircleShape)
-                                    .background(Brush.linearGradient(photo.colors))
-                                    .border(
-                                        width = if (isSelected) 3.dp else 1.dp,
-                                        color = if (isSelected) currentTheme.primary else Color(0xFF333842),
-                                        shape = CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "محدد",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                photo.title,
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) currentTheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+            InteractiveWatchFaceSurface(
+                customBitmap = customBitmap,
+                photoOpacity = photoOpacity,
+                ticksStyle = selectedTicksStyle,
+                ticksColor = ticksColor,
+                ticksOpacity = ticksOpacity,
+                handsStyle = selectedHandsStyle,
+                handsColor = handsColor,
+                secondHandColor = secondHandColor,
+                handsOpacity = handsOpacity,
+                theme = currentTheme,
+                widgetOpacity = widgetOpacity,
+                activeWidgets = activeWidgets,
+                liveSeconds = liveSeconds,
+                onWidgetMoved = { id, dx, dy ->
+                    activeWidgets = activeWidgets.map { widget ->
+                        if (widget.id == id) {
+                            val newX = (widget.offsetX + dx).coerceIn(-95f, 95f)
+                            val newY = (widget.offsetY + dy).coerceIn(-95f, 95f)
+                            widget.copy(offsetX = newX, offsetY = newY)
+                        } else widget
+                    }
+                },
+                onWidgetDeleted = { id ->
+                    activeWidgets = activeWidgets.filterNot { it.id == id }
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("🗑️ تم حذف الودجت من سطح الساعة")
                     }
                 }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("شفافية وتباين الخلفية:", fontSize = 13.sp)
-                    Text("${(photoOpacity * 100).toInt()}%", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = currentTheme.primary)
-                }
-                Slider(
-                    value = photoOpacity,
-                    onValueChange = { photoOpacity = it },
-                    valueRange = 0.2f..1.0f,
-                    colors = SliderDefaults.colors(
-                        thumbColor = currentTheme.primary,
-                        activeTrackColor = currentTheme.primary
-                    )
-                )
-            }
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 2. التحكم بأماكن الودجات وتغييرها أو حذفها
-            CardSection(title = "2. تخصيص مواقع الودجات (Complications)", icon = Icons.Default.Place) {
+            // 1. تحميل صورة من الهاتف
+            CardSection(
+                title = "1. واجهة الساعة وصورة الخلفية من الهاتف",
+                icon = Icons.Default.Add
+            ) {
                 Text(
-                    "يمكنك تعيين أي إضافة في أي مكان تريده أو حذفها تماماً:",
+                    "يمكنك اختيار أي صورة من هاتفك لتكون خلفية شاشة الساعة فوراً:",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
-                SlotSelectorRow(
-                    positionName = "الموقع العلوي (أعلى)",
-                    current = topSlot,
-                    theme = currentTheme,
-                    onSelected = { topSlot = it }
-                )
-                Divider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.surface)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            photoPickerLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = currentTheme.primary),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            if (customBitmap != null) "تغيير صورة الهاتف" else "تحميل واجهة من الهاتف",
+                            color = Color.Black,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
 
-                SlotSelectorRow(
-                    positionName = "الموقع السفلي (أسفل)",
-                    current = bottomSlot,
-                    theme = currentTheme,
-                    onSelected = { bottomSlot = it }
-                )
-                Divider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.surface)
+                    if (customBitmap != null) {
+                        OutlinedButton(
+                            onClick = {
+                                customBitmap = null
+                                customImageUri = null
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("تم الرجوع للخلفية السوداء OLED النظيفة")
+                                }
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.5f))
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null, tint = Color.Red, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("إزالة الصورة", color = Color.Red, fontSize = 12.sp)
+                        }
+                    }
+                }
 
-                SlotSelectorRow(
-                    positionName = "الموقع الأيسر (يسار)",
-                    current = leftSlot,
-                    theme = currentTheme,
-                    onSelected = { leftSlot = it }
-                )
-                Divider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.surface)
+                if (customBitmap != null) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("شفافية وتباين صورة الواجهة:", fontSize = 13.sp)
+                        Text("${(photoOpacity * 100).toInt()}%", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = currentTheme.primary)
+                    }
+                    Slider(
+                        value = photoOpacity,
+                        onValueChange = { photoOpacity = it },
+                        valueRange = 0.15f..1.0f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = currentTheme.primary,
+                            activeTrackColor = currentTheme.primary
+                        )
+                    )
+                }
+            }
 
-                SlotSelectorRow(
-                    positionName = "الموقع الأيمن (يمين)",
-                    current = rightSlot,
-                    theme = currentTheme,
-                    onSelected = { rightSlot = it }
-                )
+            Spacer(modifier = Modifier.height(14.dp))
 
-                Spacer(modifier = Modifier.height(10.dp))
+            // 2. خطوط تدريج الساعة
+            CardSection(
+                title = "2. خطوط تدريج الساعة (حذف أو زيادة الخطوط)",
+                icon = Icons.Default.Menu
+            ) {
+                Text(
+                    "اختر كثافة الخطوط على محيط الساعة أو احذفها تماماً للحصول على مظهر نظيف وبسيط:",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TicksStyle.values().forEach { style ->
+                        val isSelected = selectedTicksStyle == style
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { selectedTicksStyle = style },
+                            color = if (isSelected) currentTheme.primary.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surface,
+                            shape = RoundedCornerShape(12.dp),
+                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, currentTheme.primary) else null
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        style.title,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = if (isSelected) currentTheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        style.desc,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = { selectedTicksStyle = style },
+                                    colors = RadioButtonDefaults.colors(selectedColor = currentTheme.primary)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (selectedTicksStyle != TicksStyle.NONE) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("شفافية الخطوط:", fontSize = 13.sp)
+                        Text("${(ticksOpacity * 100).toInt()}%", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = currentTheme.primary)
+                    }
+                    Slider(
+                        value = ticksOpacity,
+                        onValueChange = { ticksOpacity = it },
+                        valueRange = 0.15f..1.0f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = currentTheme.primary,
+                            activeTrackColor = currentTheme.primary
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // 3. إضافة ودجات متنوعة
+            CardSection(
+                title = "3. إضافة ودجات متنوعة (Widgets) لسطح الساعة",
+                icon = Icons.Default.Star
+            ) {
+                Text(
+                    "انقر على أي ودجت لإضافته مباشرة على سطح الساعة. يتم التحكم به وتحريكه أو حذفه باللمس من الساعة مباشرة:",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(ComplicationType.values()) { type ->
+                        val alreadyAdded = activeWidgets.any { it.type == type }
+                        OutlinedButton(
+                            onClick = {
+                                if (!alreadyAdded) {
+                                    val count = activeWidgets.size
+                                    val newOffset = when (count % 4) {
+                                        0 -> Offset(0f, -65f)
+                                        1 -> Offset(0f, 65f)
+                                        2 -> Offset(-65f, 0f)
+                                        else -> Offset(65f, 0f)
+                                    }
+                                    activeWidgets = activeWidgets + ActiveWidget(
+                                        id = "w_${type.id}_${System.currentTimeMillis()}",
+                                        type = type,
+                                        offsetX = newOffset.x,
+                                        offsetY = newOffset.y
+                                    )
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("✨ تم إضافة ودجت ${type.label} على سطح الساعة")
+                                    }
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (alreadyAdded) currentTheme.primary.copy(alpha = 0.15f) else Color.Transparent
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (alreadyAdded) currentTheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Text(type.iconEmoji, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                type.label,
+                                fontSize = 12.sp,
+                                fontWeight = if (alreadyAdded) FontWeight.Bold else FontWeight.Normal,
+                                color = if (alreadyAdded) currentTheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                            if (alreadyAdded) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = "موجود",
+                                    tint = currentTheme.primary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -355,20 +553,20 @@ fun PixelAnalogStudioProApp() {
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // 3. أنواع العقارب الفاخرة وتخصيص ألوانها
-            CardSection(title = "3. أنواع العقارب الفاخرة وتخصيص ألوانها", icon = Icons.Default.Refresh) {
+            // 4. أنواع العقارب الفاخرة
+            CardSection(title = "4. أنواع العقارب الفاخرة وتخصيص ألوانها", icon = Icons.Default.Refresh) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     HandsStyle.values().forEach { style ->
                         val isSelected = selectedHandsStyle == style
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
+                                .clip(RoundedCornerShape(12.dp))
                                 .clickable { selectedHandsStyle = style },
                             color = if (isSelected) currentTheme.primary.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surface,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(12.dp),
                             border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, currentTheme.primary) else null
                         ) {
                             Row(
@@ -382,7 +580,7 @@ fun PixelAnalogStudioProApp() {
                                     Text(
                                         style.title,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
+                                        fontSize = 14.sp,
                                         color = if (isSelected) currentTheme.primary else MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
@@ -448,10 +646,10 @@ fun PixelAnalogStudioProApp() {
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // 4. ألوان نظام Material You
-            CardSection(title = "4. ألوان نظام Material You الحيوية", icon = Icons.Default.ThumbUp) {
+            // 5. ألوان نظام Material You
+            CardSection(title = "5. ألوان نظام Material You الحيوية", icon = Icons.Default.ThumbUp) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -498,7 +696,7 @@ fun PixelAnalogStudioProApp() {
             Button(
                 onClick = {
                     coroutineScope.launch {
-                        snackbarHostState.showSnackbar("✨ تم تطبيق واجهة الساعة مع تخصيص الودجات والعقارب بنجاح!")
+                        snackbarHostState.showSnackbar("✨ تم تطبيق واجهة الساعة المخصصة بنجاح!")
                     }
                 },
                 modifier = Modifier
@@ -522,24 +720,26 @@ fun PixelAnalogStudioProApp() {
 }
 
 // -------------------------------------------------------------
-// رسم الساعة والخلفية والعقارب
+// سطح الساعة التفاعلي
 // -------------------------------------------------------------
 
 @Composable
-fun AnalogWatchFullPreview(
-    photoTheme: WatchPhotoTheme,
+fun InteractiveWatchFaceSurface(
+    customBitmap: ImageBitmap?,
     photoOpacity: Float,
+    ticksStyle: TicksStyle,
+    ticksColor: Color,
+    ticksOpacity: Float,
     handsStyle: HandsStyle,
     handsColor: Color,
     secondHandColor: Color,
     handsOpacity: Float,
     theme: ThemeColorOption,
-    topSlot: ComplicationType,
-    bottomSlot: ComplicationType,
-    leftSlot: ComplicationType,
-    rightSlot: ComplicationType,
     widgetOpacity: Float,
-    liveSeconds: Boolean
+    activeWidgets: List<ActiveWidget>,
+    liveSeconds: Boolean,
+    onWidgetMoved: (String, Float, Float) -> Unit,
+    onWidgetDeleted: (String) -> Unit
 ) {
     var currentTime by remember { mutableStateOf(Calendar.getInstance()) }
 
@@ -556,83 +756,85 @@ fun AnalogWatchFullPreview(
 
     Box(
         modifier = Modifier
-            .size(285.dp)
-            .shadow(24.dp, CircleShape, spotColor = theme.primary.copy(alpha = 0.5f))
+            .size(290.dp)
+            .shadow(28.dp, CircleShape, spotColor = theme.primary.copy(alpha = 0.55f))
             .clip(CircleShape)
             .background(Color.Black)
             .border(9.dp, Color(0xFF1B1D23), CircleShape)
-            .border(10.dp, Color(0xFF101216), CircleShape)
-            .padding(8.dp),
+            .border(10.dp, Color(0xFF101216), CircleShape),
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val center = Offset(size.width / 2, size.height / 2)
             val radius = size.width / 2
 
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = photoTheme.colors.map { it.copy(alpha = photoOpacity) } + listOf(Color.Black),
-                    center = center,
-                    radius = radius
-                ),
-                radius = radius,
-                center = center
-            )
-
-            if (photoTheme == WatchPhotoTheme.CARBON_MATRIX) {
-                val step = 10.dp.toPx()
-                var x = 0f
-                while (x < size.width) {
-                    drawLine(
-                        color = Color.White.copy(alpha = 0.05f),
-                        start = Offset(x, 0f),
-                        end = Offset(x, size.height),
-                        strokeWidth = 1f
-                    )
-                    x += step
-                }
+            if (customBitmap != null) {
+                drawImage(
+                    image = customBitmap,
+                    dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt()),
+                    alpha = photoOpacity
+                )
+                drawCircle(
+                    color = Color.Black.copy(alpha = 0.35f),
+                    radius = radius,
+                    center = center
+                )
+            } else {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0xFF181B22), Color(0xFF0C0E12), Color.Black),
+                        center = center,
+                        radius = radius
+                    ),
+                    radius = radius,
+                    center = center
+                )
             }
 
-            for (i in 0 until 12) {
-                val angle = i * 30.0 * (Math.PI / 180.0)
-                val isCardinal = i % 3 == 0
-                val tickLen = if (isCardinal) 12.dp.toPx() else 6.dp.toPx()
-                val tickWidth = if (isCardinal) 3.5.dp.toPx() else 1.5.dp.toPx()
-                val startR = radius - tickLen - 6.dp.toPx()
-                val endR = radius - 6.dp.toPx()
+            if (ticksStyle != TicksStyle.NONE) {
+                val totalTicks = ticksStyle.count
+                for (i in 0 until totalTicks) {
+                    val angle = i * (360.0 / totalTicks) * (Math.PI / 180.0)
+                    val isMajor = if (totalTicks == 60) (i % 5 == 0) else (i % 3 == 0 || totalTicks == 4)
 
-                drawLine(
-                    color = if (isCardinal) theme.primary.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.45f),
-                    start = Offset(center.x + startR * cos(angle).toFloat(), center.y + startR * sin(angle).toFloat()),
-                    end = Offset(center.x + endR * cos(angle).toFloat(), center.y + endR * sin(angle).toFloat()),
-                    strokeWidth = tickWidth,
-                    cap = StrokeCap.Round
-                )
+                    val tickLen = when {
+                        isMajor -> 11.dp.toPx()
+                        else -> 5.dp.toPx()
+                    }
+                    val tickWidth = when {
+                        isMajor -> 3.dp.toPx()
+                        else -> 1.5.dp.toPx()
+                    }
+                    val startR = radius - tickLen - 6.dp.toPx()
+                    val endR = radius - 6.dp.toPx()
+
+                    drawLine(
+                        color = if (isMajor) theme.primary.copy(alpha = ticksOpacity) else ticksColor.copy(alpha = ticksOpacity * 0.6f),
+                        start = Offset(
+                            center.x + startR * cos(angle).toFloat(),
+                            center.y + startR * sin(angle).toFloat()
+                        ),
+                        end = Offset(
+                            center.x + endR * cos(angle).toFloat(),
+                            center.y + endR * sin(angle).toFloat()
+                        ),
+                        strokeWidth = tickWidth,
+                        cap = StrokeCap.Round
+                    )
+                }
             }
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
-            if (topSlot != ComplicationType.NONE) {
-                Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = 26.dp)) {
-                    RenderComplicationItem(topSlot, theme, widgetOpacity)
-                }
-            }
-
-            if (bottomSlot != ComplicationType.NONE) {
-                Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 26.dp)) {
-                    RenderComplicationItem(bottomSlot, theme, widgetOpacity)
-                }
-            }
-
-            if (leftSlot != ComplicationType.NONE) {
-                Box(modifier = Modifier.align(Alignment.CenterStart).padding(start = 18.dp)) {
-                    RenderComplicationItem(leftSlot, theme, widgetOpacity)
-                }
-            }
-
-            if (rightSlot != ComplicationType.NONE) {
-                Box(modifier = Modifier.align(Alignment.CenterEnd).padding(end = 18.dp)) {
-                    RenderComplicationItem(rightSlot, theme, widgetOpacity)
+            activeWidgets.forEach { widget ->
+                key(widget.id) {
+                    DraggableDeletableWidget(
+                        widget = widget,
+                        theme = theme,
+                        opacity = widgetOpacity,
+                        onMove = { dx, dy -> onWidgetMoved(widget.id, dx, dy) },
+                        onDelete = { onWidgetDeleted(widget.id) }
+                    )
                 }
             }
         }
@@ -660,84 +862,62 @@ fun AnalogWatchFullPreview(
 }
 
 // -------------------------------------------------------------
-// رسم عناصر الودجات Material You
+// ودجت قابل للسحب واللمس والحذف مباشرة
 // -------------------------------------------------------------
 
 @Composable
-fun RenderComplicationItem(
-    type: ComplicationType,
+fun BoxScope.DraggableDeletableWidget(
+    widget: ActiveWidget,
     theme: ThemeColorOption,
-    opacity: Float
+    opacity: Float,
+    onMove: (Float, Float) -> Unit,
+    onDelete: () -> Unit
 ) {
     val dateText = remember { SimpleDateFormat("EEE, d", Locale.ENGLISH).format(Date()).uppercase() }
+    val displayValue = if (widget.type == ComplicationType.DATE) dateText else widget.type.value
 
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         color = Color(0xFF141820).copy(alpha = opacity),
-        border = androidx.compose.foundation.BorderStroke(1.dp, theme.primary.copy(alpha = 0.35f * opacity)),
-        modifier = Modifier.clip(RoundedCornerShape(12.dp))
+        border = androidx.compose.foundation.BorderStroke(1.dp, theme.primary.copy(alpha = 0.45f * opacity)),
+        modifier = Modifier
+            .align(Alignment.Center)
+            .offset { IntOffset(widget.offsetX.roundToInt(), widget.offsetY.roundToInt()) }
+            .pointerInput(widget.id) {
+                detectDragGestures { change, dragAmount ->
+                    change.consume()
+                    onMove(dragAmount.x, dragAmount.y)
+                }
+            }
+            .clip(RoundedCornerShape(14.dp))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            when (type) {
-                ComplicationType.DATE -> {
-                    Text("📅", fontSize = 10.sp)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        dateText,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = theme.onContainer
-                    )
-                }
-                ComplicationType.BATTERY -> {
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(theme.primary)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        "85%",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-                ComplicationType.WEATHER -> {
-                    Text("☀️", fontSize = 11.sp)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        "24°C",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-                ComplicationType.STEPS -> {
-                    Text("👣", fontSize = 10.sp)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        "8.4k",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = theme.primary
-                    )
-                }
-                ComplicationType.HEART_RATE -> {
-                    Text("❤️", fontSize = 10.sp)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        "72",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFFF6B6B)
-                    )
-                }
-                ComplicationType.NONE -> {}
+            Text(widget.type.iconEmoji, fontSize = 11.sp)
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                displayValue,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = theme.onContainer
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Box(
+                modifier = Modifier
+                    .size(17.dp)
+                    .clip(CircleShape)
+                    .background(Color.Red.copy(alpha = 0.25f))
+                    .clickable { onDelete() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "حذف الودجت",
+                    tint = Color.White,
+                    modifier = Modifier.size(11.dp)
+                )
             }
         }
     }
@@ -785,7 +965,11 @@ fun DrawScope.drawWatchHandsPro(
                 strokeWidth = 2.dp.toPx(),
                 cap = StrokeCap.Round
             )
-            drawCircle(color = secondColor, radius = 4.dp.toPx(), center = Offset(center.x + (secLen * 0.72f) * cos(secAngle).toFloat(), center.y + (secLen * 0.72f) * sin(secAngle).toFloat()))
+            drawCircle(
+                color = secondColor,
+                radius = 4.dp.toPx(),
+                center = Offset(center.x + (secLen * 0.72f) * cos(secAngle).toFloat(), center.y + (secLen * 0.72f) * sin(secAngle).toFloat())
+            )
         }
 
         HandsStyle.PILOT_CHRONO -> {
@@ -924,7 +1108,7 @@ fun DrawScope.drawWatchHandsPro(
 }
 
 // -------------------------------------------------------------
-// مكونات واجهة المستخدم
+// بطاقات الأقسام
 // -------------------------------------------------------------
 
 @Composable
@@ -952,53 +1136,12 @@ fun CardSection(
                 Text(
                     text = title,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
+                    fontSize = 15.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
             content()
-        }
-    }
-}
-
-@Composable
-fun SlotSelectorRow(
-    positionName: String,
-    current: ComplicationType,
-    theme: ThemeColorOption,
-    onSelected: (ComplicationType) -> Unit
-) {
-    Column {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(positionName, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text(
-                current.label,
-                fontSize = 12.sp,
-                color = if (current == ComplicationType.NONE) Color.Gray else theme.primary,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Spacer(modifier = Modifier.height(6.dp))
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            items(ComplicationType.values()) { type ->
-                FilterChip(
-                    selected = current == type,
-                    onClick = { onSelected(type) },
-                    label = { Text(type.label, fontSize = 11.sp) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = theme.primary.copy(alpha = 0.25f),
-                        selectedLabelColor = theme.primary
-                    )
-                )
-            }
         }
     }
 }

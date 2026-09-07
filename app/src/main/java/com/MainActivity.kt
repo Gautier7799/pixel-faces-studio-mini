@@ -58,50 +58,22 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.cos
-import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
-
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            MaterialTheme(
-                colorScheme = darkColorScheme(
-                    primary = Color(0xFF7CA7F5),
-                    secondary = Color(0xFFA5D6A7),
-                    tertiary = Color(0xFFFFCC80),
-                    background = Color(0xFF0C0E12),
-                    surface = Color(0xFF161920),
-                    surfaceVariant = Color(0xFF202530),
-                    onSurface = Color(0xFFE8EAEE),
-                    onSurfaceVariant = Color(0xFFB4B9C4)
-                )
-            ) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    PixelAnalogStudioProApp()
-                }
-            }
-        }
-    }
-}
+import kotlin.math.roundToInt
 
 // -------------------------------------------------------------
 // Models, Enums & Presets
 // -------------------------------------------------------------
 
-// أشكال الإطارات الأيقونية للأدوات (Widgets Shape) المستوحاة من شاشة Effets / Forme
+// أشكال الإطارات الأيقونية للأدوات (Widgets Shape) المستوحاة بدقة تامة من شاشة Effets / Forme في الصور المرفقة
 enum class WidgetShapeStyle(val title: String, val desc: String) {
-    PILL("كبسولة (Pill)", "مستطيل ذو حواف دائرية ناعمة"),
-    CIRCLE("دائري كامل (Circle)", "شكل دائري هندسي مضغوط"),
-    SQUIRCLE("مربع دائري (Squircle)", "مربع منحني الزوايا"),
-    ARCH("قوس هندسي (Arch)", "قبة كلاسيكية مقوسة"),
-    FLOWER("زهرة/مفصص (Flower)", "شكل هندسي منحني الأضلاع"),
-    HEXAGON("سداسي مائل (Hexagon)", "شكل كريستالي متعدد الأضلاع")
+    SQUIRCLE("مربع دائري (Squircle)", "مربع ممتلئ منحني الزوايا الناعمة"),
+    ARCH("قوس هندسي (Arch)", "شكل قبة أسطوانية مستديرة من الأعلى"),
+    FLOWER("زهرة/مفصص (Flower)", "شكل وردة مفصصة رباعية الأضلاع"),
+    HEXAGON("سداسي مائل (Hexagon)", "شكل مضلع سداسي كريستالي متقن"),
+    CIRCLE("دائري كامل (Circle)", "قرص هندسي دائري كلاسيكي"),
+    PILL("كبسولة (Pill)", "مستطيل ذو حواف دائرية ناعمة")
 }
 
 enum class HandsStyle(val title: String, val desc: String) {
@@ -169,49 +141,55 @@ fun loadBitmapFromUri(context: Context, uri: Uri): Bitmap? {
     }
 }
 
-// -------------------------------------------------------------
-// التطبيق الرئيسي مع القائمة الجانبية المتقدمة (Navigation Drawer)
-// -------------------------------------------------------------
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    WatchFaceStudioApp()
+                }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PixelAnalogStudioProApp() {
+fun WatchFaceStudioApp() {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
-    // حالة الحوارات المنبثقة من القائمة الجانبية
-    var showFilesDialog by remember { mutableStateOf(false) }
-    var showShareDialog by remember { mutableStateOf(false) }
-    var savedFacesCount by remember { mutableIntStateOf(1) }
-
-    // 1. واجهة الصورة المخصصة من الهاتف
+    // 1. صورة مخصصة من هاتف المستخدم
     var customImageUri by remember { mutableStateOf<Uri?>(null) }
     var customBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
-    var photoOpacity by remember { mutableFloatStateOf(1.0f) }
+    var photoOpacity by remember { mutableFloatStateOf(0.95f) }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
             customImageUri = uri
-            val loaded = loadBitmapFromUri(context, uri)
-            if (loaded != null) {
-                customBitmap = loaded.asImageBitmap()
+            val bmp = loadBitmapFromUri(context, uri)
+            if (bmp != null) {
+                customBitmap = bmp.asImageBitmap()
                 coroutineScope.launch {
-                    snackbarHostState.showSnackbar("📸 تم تحميل وتطبيق خلفية الواجهة من الهاتف بنجاح!")
+                    snackbarHostState.showSnackbar(" تم تحميل واجهة من هاتفك بنجاح وبدقة فائقة")
                 }
-            } else {
-                Toast.makeText(context, "تعذر قراءة الصورة", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    // 2. التحكم في خطوط واجهة الساعة (حذف أو زيادة)
+    // 2. خطوط الساعة وتنسيقها
     var selectedTicksStyle by remember { mutableStateOf(TicksStyle.HOURS_12) }
     var ticksColor by remember { mutableStateOf(Color.White) }
-    var ticksOpacity by remember { mutableFloatStateOf(0.7f) }
+    var ticksOpacity by remember { mutableFloatStateOf(0.85f) }
 
     // 3. ألوان نظام Material You وتأثيرات Forme
     var currentTheme by remember { mutableStateOf(MaterialYouThemes[0]) }
@@ -244,206 +222,154 @@ fun PixelAnalogStudioProApp() {
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(
-                drawerContainerColor = MaterialTheme.colorScheme.surface,
-                drawerContentColor = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.width(310.dp)
             ) {
-                // ترويسة القائمة الجانبية
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(currentTheme.primary.copy(alpha = 0.35f), Color.Transparent)
-                            )
-                        )
-                        .padding(24.dp)
-                ) {
-                    Column {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(currentTheme.primary),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Settings, contentDescription = null, tint = Color.Black, modifier = Modifier.size(28.dp))
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            "Pixel Faces Studio Pro",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            "لوحة التحكم والمزامنة مع الساعة",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 1. خيار الحفظ (Enregistrer / Save)
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.Check, contentDescription = null, tint = currentTheme.primary) },
-                    label = {
-                        Column {
-                            Text("الحفظ (Enregistrer)", fontWeight = FontWeight.Bold)
-                            Text("حفظ التخصيص الحالي في الذاكرة", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    },
-                    selected = false,
-                    onClick = {
-                        coroutineScope.launch {
-                            drawerState.close()
-                            savedFacesCount++
-                            snackbarHostState.showSnackbar("💾 تم حفظ تصميم واجهة الساعة الحالي في الذاكرة بنجاح!")
-                        }
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
-
-                // 2. خيار الملفات (Fichiers / Files)
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.AccountBox, contentDescription = null, tint = Color(0xFFFFB74D)) },
-                    label = {
-                        Column {
-                            Text("ملفات (Fichiers)", fontWeight = FontWeight.Bold)
-                            Text("عرض التصاميم والواجهات المحفوظة ($savedFacesCount)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    },
-                    selected = false,
-                    onClick = {
-                        coroutineScope.launch {
-                            drawerState.close()
-                            showFilesDialog = true
-                        }
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
-
-                // 3. خيار مشاركة مع الساعة (Partage Montre / Share Watch)
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Color(0xFF81C784)) },
-                    label = {
-                        Column {
-                            Text("مشاركة الساعة (Partage Montre)", fontWeight = FontWeight.Bold)
-                            Text("إرسال الواجهة إلى Wear OS / ساعة ذكية", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    },
-                    selected = false,
-                    onClick = {
-                        coroutineScope.launch {
-                            drawerState.close()
-                            showShareDialog = true
-                        }
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-
-                // زر معلومات الإصدار
+                Spacer(modifier = Modifier.height(16.dp))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Pixel Watch Studio v2.4", fontSize = 11.sp, color = Color.Gray)
-                    Text("Wear OS Ready", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = currentTheme.primary)
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(currentTheme.primary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = null, tint = Color.Black)
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("Pixel Faces Studio", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("الإعدادات وتصدير الواجهات", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null) },
+                    label = { Text("مشاركة الواجهة الحالية (Share Watchface)") },
+                    selected = false,
+                    onClick = {
+                        coroutineScope.launch {
+                            drawerState.close()
+                            val shareIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(
+                                    Intent.EXTRA_TEXT,
+                                    "✨ صممت واجهة ساعة مذهلة عبر Pixel Faces Studio!\n- الثيم: ${currentTheme.name}\n- نمط العقارب: ${selectedHandsStyle.title}\n- الودجات: ${activeWidgets.size} ودجات تفاعلية\n- شكل الإطار: ${selectedWidgetShape.title}"
+                                )
+                                type = "text/plain"
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "مشاركة مواصفات الواجهة عبر"))
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                    label = { Text("إعادة ضبط الواجهة للافتراضي") },
+                    selected = false,
+                    onClick = {
+                        coroutineScope.launch {
+                            drawerState.close()
+                            customBitmap = null
+                            customImageUri = null
+                            selectedTicksStyle = TicksStyle.HOURS_12
+                            selectedHandsStyle = HandsStyle.PIXEL_BATON
+                            currentTheme = MaterialYouThemes[0]
+                            selectedWidgetShape = WidgetShapeStyle.PILL
+                            activeWidgets = listOf(
+                                ActiveWidget("w_date", ComplicationType.DATE, offsetX = 0f, offsetY = -72f),
+                                ActiveWidget("w_batt", ComplicationType.BATTERY, offsetX = 0f, offsetY = 72f),
+                                ActiveWidget("w_weather", ComplicationType.WEATHER, offsetX = -72f, offsetY = 0f),
+                                ActiveWidget("w_steps", ComplicationType.STEPS, offsetX = 72f, offsetY = 0f)
+                            )
+                            snackbarHostState.showSnackbar("تمت استعادة الإعدادات الأصلية للواجهة")
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
+
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    "Pixel Faces Studio Pro - الإصدار المتكامل 3.2",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(20.dp)
+                )
             }
         }
     ) {
         Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
-                TopAppBar(
+                CenterAlignedTopAppBar(
                     title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(14.dp)
-                                    .clip(CircleShape)
-                                    .background(currentTheme.primary)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "Pixel Faces Studio",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 18.sp,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    "Pixel Faces Studio Pro",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp
-                                )
-                                Text(
-                                    "حرك الودجات بحرية تامة على كامل شاشة الساعة",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            Text(
+                                "تصميم وتخصيص ساعات Google Pixel المتقدمة",
+                                fontSize = 11.sp,
+                                color = currentTheme.primary
+                            )
                         }
                     },
                     navigationIcon = {
                         IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "القائمة الجانبية للإعدادات والمشاركة")
+                            Icon(Icons.Default.Menu, contentDescription = "القائمة الجانبية")
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface
-                    ),
                     actions = {
-                        // زر المشاركة السريع مباشرة في الشريط العلوي (Partage Montre)
-                        IconButton(onClick = { showShareDialog = true }) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Send,
-                                contentDescription = "مشاركة مع الساعة Partage Montre",
-                                tint = currentTheme.primary
-                            )
+                        IconButton(onClick = {
+                            val shareIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(
+                                    Intent.EXTRA_TEXT,
+                                    "✨ صممت واجهة ساعة مذهلة عبر Pixel Faces Studio!\n- الثيم: ${currentTheme.name}\n- نمط العقارب: ${selectedHandsStyle.title}\n- الودجات: ${activeWidgets.size} ودجات تفاعلية"
+                                )
+                                type = "text/plain"
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "مشاركة الواجهة"))
+                        }) {
+                            Icon(Icons.Default.Share, contentDescription = "مشاركة الواجهة", tint = currentTheme.primary)
                         }
-                        IconButton(onClick = { liveSeconds = !liveSeconds }) {
-                            Icon(
-                                imageVector = if (liveSeconds) Icons.Default.PlayArrow else Icons.Default.Close,
-                                contentDescription = "ثواني حية",
-                                tint = if (liveSeconds) currentTheme.primary else Color.Gray
-                            )
-                        }
-                    }
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
                 )
             }
-        ) { padding ->
+        ) { innerPadding ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState()),
+                    .padding(innerPadding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // =========================================================
-                // سطح الساعة التفاعلي: حرية حركة كاملة على كافة المساحة
-                // =========================================================
+                // شريط إرشادي تفاعلي يوضح إمكانية السحب الحر
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = currentTheme.primary.copy(alpha = 0.12f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, currentTheme.primary.copy(alpha = 0.35f)),
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    border = androidx.compose.foundation.BorderStroke(1.dp, currentTheme.primary.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Info,
+                            Icons.Default.CheckCircle,
                             contentDescription = null,
                             tint = currentTheme.primary,
                             modifier = Modifier.size(18.dp)
@@ -460,6 +386,7 @@ fun PixelAnalogStudioProApp() {
 
                 Spacer(modifier = Modifier.height(10.dp))
 
+                // عرض الساعة التفاعلي الحي
                 InteractiveWatchFaceSurface(
                     customBitmap = customBitmap,
                     photoOpacity = photoOpacity,
@@ -481,7 +408,8 @@ fun PixelAnalogStudioProApp() {
                                 val targetX = widget.offsetX + dx
                                 val targetY = widget.offsetY + dy
                                 val dist = sqrt(targetX * targetX + targetY * targetY)
-                                val maxRadius = 115f
+                                // زيادة مساحة الحركة لتشمل أقصى اليمين واليسار وفوق وتحت بكامل حرية سطح الساعة
+                                val maxRadius = 142f
                                 if (dist > maxRadius && dist > 0f) {
                                     val scale = maxRadius / dist
                                     widget.copy(offsetX = targetX * scale, offsetY = targetY * scale)
@@ -515,6 +443,7 @@ fun PixelAnalogStudioProApp() {
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // صف أيقونات الأشكال المستوحاة بدقة من الصورة (دائري، كبسولة، مقوس، مفصص، سداسي...)
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -534,6 +463,7 @@ fun PixelAnalogStudioProApp() {
                                     )
                                     .padding(horizontal = 12.dp, vertical = 10.dp)
                             ) {
+                                // رسم أيقونة مصغرة تحاكي الشكل بدقة
                                 WidgetShapeThumbnail(shapeStyle = shapeStyle, isSelected = isSelected, theme = currentTheme)
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
@@ -548,6 +478,7 @@ fun PixelAnalogStudioProApp() {
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // سلايدر شفافية الودجات
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -595,11 +526,16 @@ fun PixelAnalogStudioProApp() {
                             },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = currentTheme.primary),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(14.dp)
                         ) {
-                            Icon(Icons.Default.AccountBox, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("تحميل صورة من الهاتف", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(
+                                if (customBitmap != null) "تغيير صورة الهاتف" else "تحميل واجهة من الهاتف",
+                                color = Color.Black,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
                         }
 
                         if (customBitmap != null) {
@@ -608,10 +544,10 @@ fun PixelAnalogStudioProApp() {
                                     customBitmap = null
                                     customImageUri = null
                                     coroutineScope.launch {
-                                        snackbarHostState.showSnackbar("تمت إزالة صورة الواجهة والعودة للخلفية الافتراضية")
+                                        snackbarHostState.showSnackbar("تم الرجوع للخلفية السوداء OLED النظيفة")
                                     }
                                 },
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.5f))
                             ) {
                                 Icon(Icons.Default.Delete, contentDescription = null, tint = Color.Red, modifier = Modifier.size(18.dp))
@@ -669,36 +605,29 @@ fun PixelAnalogStudioProApp() {
                                 onClick = {
                                     if (alreadyAdded) {
                                         activeWidgets = activeWidgets.filterNot { it.type == type }
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar("🗑️ تم حذف ودجت ${type.label}")
-                                        }
                                     } else {
-                                        val count = activeWidgets.size
-                                        val newOffset = when (count % 4) {
-                                            0 -> Offset(0f, -70f)
-                                            1 -> Offset(0f, 70f)
-                                            2 -> Offset(-70f, 0f)
-                                            else -> Offset(70f, 0f)
+                                        val newOffset = when (activeWidgets.size % 4) {
+                                            0 -> 0f to -70f
+                                            1 -> 0f to 70f
+                                            2 -> -70f to 0f
+                                            else -> 70f to 0f
                                         }
                                         activeWidgets = activeWidgets + ActiveWidget(
                                             id = "w_${type.id}_${System.currentTimeMillis()}",
                                             type = type,
-                                            offsetX = newOffset.x,
-                                            offsetY = newOffset.y
+                                            offsetX = newOffset.first,
+                                            offsetY = newOffset.second
                                         )
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar("✨ تم إضافة ودجت ${type.label} على سطح الساعة")
-                                        }
                                     }
                                 },
-                                shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     containerColor = if (alreadyAdded) currentTheme.primary.copy(alpha = 0.18f) else Color.Transparent
                                 ),
                                 border = androidx.compose.foundation.BorderStroke(
-                                    1.2.dp,
-                                    if (alreadyAdded) currentTheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                                )
+                                    width = if (alreadyAdded) 2.dp else 1.dp,
+                                    color = if (alreadyAdded) currentTheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                                ),
+                                shape = RoundedCornerShape(12.dp)
                             ) {
                                 Text(type.iconEmoji, fontSize = 14.sp)
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -712,55 +641,12 @@ fun PixelAnalogStudioProApp() {
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Icon(
                                         Icons.Default.Check,
-                                        contentDescription = "موجود",
-                                        tint = currentTheme.primary,
-                                        modifier = Modifier.size(14.dp)
+                                        contentDescription = null,
+                                        modifier = Modifier.size(15.dp),
+                                        tint = currentTheme.primary
                                     )
                                 }
                             }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                activeWidgets = emptyList()
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("🗑️ تم مسح جميع الودجات من الساعة")
-                                }
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.5f))
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = null, tint = Color.Red, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("مسح الكل", fontSize = 11.sp, color = Color.Red)
-                        }
-
-                        OutlinedButton(
-                            onClick = {
-                                activeWidgets = listOf(
-                                    ActiveWidget("w_date", ComplicationType.DATE, offsetX = 0f, offsetY = -72f),
-                                    ActiveWidget("w_batt", ComplicationType.BATTERY, offsetX = 0f, offsetY = 72f),
-                                    ActiveWidget("w_weather", ComplicationType.WEATHER, offsetX = -72f, offsetY = 0f),
-                                    ActiveWidget("w_steps", ComplicationType.STEPS, offsetX = 72f, offsetY = 0f)
-                                )
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("🔄 تم استعادة الودجات الافتراضية")
-                                }
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, tint = currentTheme.primary, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("إعادة التعيين", fontSize = 11.sp)
                         }
                     }
                 }
@@ -768,42 +654,98 @@ fun PixelAnalogStudioProApp() {
                 Spacer(modifier = Modifier.height(14.dp))
 
                 // =========================================================
-                // 4. خطوط تدريج الساعة (حذف أو زيادة)
+                // 4. ثيمات الألوان الحية (Material You Themes)
                 // =========================================================
                 CardSection(
-                    title = "4. خطوط تدريج الساعة (حذف أو زيادة الخطوط)",
-                    icon = Icons.Default.Menu
+                    title = "4. ثيمات ألوان أندرويد 14/15 (Material You)",
+                    icon = Icons.Default.Favorite
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "ألوان ديناميكية عصرية مأخوذة من ساعات Pixel الأصلية:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(MaterialYouThemes) { theme ->
+                            val isSelected = currentTheme.name == theme.name
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable {
+                                        currentTheme = theme
+                                        secondHandColor = theme.primary
+                                    }
+                                    .background(if (isSelected) theme.primary.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surface)
+                                    .border(
+                                        width = if (isSelected) 2.dp else 1.dp,
+                                        color = if (isSelected) theme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                                        shape = RoundedCornerShape(14.dp)
+                                    )
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(CircleShape)
+                                        .background(theme.primary)
+                                        .border(2.dp, Color.Black.copy(alpha = 0.4f), CircleShape)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    theme.name,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) theme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // =========================================================
+                // 5. خطوط وعلامات الساعة التفاعلية (Dial Ticks)
+                // =========================================================
+                CardSection(
+                    title = "5. خطوط وعلامات الساعة (Dial Ticks)",
+                    icon = Icons.Default.Check
+                ) {
+                    Text(
+                        "تحكم بعدد علامات الساعة أو اجعل الواجهة نظيفة تماماً بدون خطوط:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         TicksStyle.values().forEach { style ->
                             val isSelected = selectedTicksStyle == style
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isSelected) currentTheme.primary.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surface,
-                                border = androidx.compose.foundation.BorderStroke(
-                                    1.dp,
-                                    if (isSelected) currentTheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { selectedTicksStyle = style }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(14.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    RadioButton(
-                                        selected = isSelected,
-                                        onClick = { selectedTicksStyle = style },
-                                        colors = RadioButtonDefaults.colors(selectedColor = currentTheme.primary)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { selectedTicksStyle = style },
+                                label = {
+                                    Text(
+                                        style.title.substringBefore(" ("),
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(style.title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                        Text(style.desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                            }
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = currentTheme.primary.copy(alpha = 0.2f),
+                                    selectedLabelColor = currentTheme.primary
+                                )
+                            )
                         }
                     }
 
@@ -832,111 +774,66 @@ fun PixelAnalogStudioProApp() {
                 Spacer(modifier = Modifier.height(14.dp))
 
                 // =========================================================
-                // 5. تخصيص العقارب (Hands Style)
+                // 6. نمط وشكل العقارب الفاخرة (Watch Hands)
                 // =========================================================
                 CardSection(
-                    title = "5. نمط وتصميم العقارب (Hands Style)",
-                    icon = Icons.Default.DateRange
+                    title = "6. نمط وتصميم العقارب الفاخرة (Hands)",
+                    icon = Icons.Default.Build
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        HandsStyle.values().forEach { style ->
+                    Text(
+                        "اختر تصميم العقارب المفضل من ساعات الطيارين، الغواصين، أو Pixel الأصلية:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(HandsStyle.values()) { style ->
                             val isSelected = selectedHandsStyle == style
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isSelected) currentTheme.primary.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surface,
-                                border = androidx.compose.foundation.BorderStroke(
-                                    1.dp,
-                                    if (isSelected) currentTheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                            OutlinedButton(
+                                onClick = { selectedHandsStyle = style },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (isSelected) currentTheme.primary.copy(alpha = 0.2f) else Color.Transparent
                                 ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { selectedHandsStyle = style }
+                                border = androidx.compose.foundation.BorderStroke(
+                                    width = if (isSelected) 2.dp else 1.dp,
+                                    color = if (isSelected) currentTheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                ),
+                                shape = RoundedCornerShape(12.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(14.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    RadioButton(
-                                        selected = isSelected,
-                                        onClick = { selectedHandsStyle = style },
-                                        colors = RadioButtonDefaults.colors(selectedColor = currentTheme.primary)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(style.title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                        Text(style.desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
+                                Text(
+                                    style.title,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) currentTheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
+                    // تبديل حركة عقرب الثواني الحي
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("شفافية العقارب:", fontSize = 13.sp)
-                        Text("${(handsOpacity * 100).toInt()}%", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = currentTheme.primary)
-                    }
-                    Slider(
-                        value = handsOpacity,
-                        onValueChange = { handsOpacity = it },
-                        valueRange = 0.4f..1.0f,
-                        colors = SliderDefaults.colors(
-                            thumbColor = currentTheme.primary,
-                            activeTrackColor = currentTheme.primary
-                        )
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // =========================================================
-                // 6. لوحة ألوان Material You
-                // =========================================================
-                CardSection(
-                    title = "6. ألوان Material You الذكية",
-                    icon = Icons.Default.Favorite
-                ) {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(MaterialYouThemes) { themeOption ->
-                            val isSelected = currentTheme.name == themeOption.name
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .clickable {
-                                        currentTheme = themeOption
-                                        secondHandColor = themeOption.primary
-                                    }
-                                    .background(if (isSelected) themeOption.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surface)
-                                    .padding(8.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(CircleShape)
-                                        .background(themeOption.primary)
-                                        .border(
-                                            2.dp,
-                                            if (isSelected) Color.White else Color.Transparent,
-                                            CircleShape
-                                        )
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    themeOption.name,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                )
-                            }
+                        Column {
+                            Text("عقرب الثواني المتحرك الحي:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("تحديث زاوية الثواني لحظة بلحظة", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                        Switch(
+                            checked = liveSeconds,
+                            onCheckedChange = { liveSeconds = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.Black,
+                                checkedTrackColor = currentTheme.primary
+                            )
+                        )
                     }
                 }
 
@@ -944,115 +841,10 @@ fun PixelAnalogStudioProApp() {
             }
         }
     }
-
-    // -------------------------------------------------------------
-    // الحوارات المنبثقة (Dialogs)
-    // -------------------------------------------------------------
-
-    if (showFilesDialog) {
-        AlertDialog(
-            onDismissRequest = { showFilesDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AccountBox, contentDescription = null, tint = Color(0xFFFFB74D))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("ملفات الواجهات المحفوظة")
-                }
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("قائمة الواجهات المحفوظة محلياً لديك:", fontSize = 13.sp)
-                    repeat(savedFacesCount) { index ->
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text("Pixel Watch Face #${index + 1}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    Text("تم الحفظ في الذاكرة بنجاح", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                Text("جاهز ✅", fontSize = 11.sp, color = Color(0xFF81C784))
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(onClick = { showFilesDialog = false }) {
-                    Text("إغلاق")
-                }
-            }
-        )
-    }
-
-    if (showShareDialog) {
-        AlertDialog(
-            onDismissRequest = { showShareDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Color(0xFF81C784))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("مشاركة الساعة (Partage Montre)")
-                }
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "اختر الطريقة المرغوبة لإرسال وتصدير الواجهة إلى ساعتك الذكية (Wear OS):",
-                        fontSize = 13.sp
-                    )
-                    OutlinedButton(
-                        onClick = {
-                            val sendIntent = Intent().apply {
-                                action = Intent.ACTION_SEND
-                                putExtra(Intent.EXTRA_TEXT, "تم إنشاء واجهة ساعة Pixel Faces Studio Pro بنجاح!")
-                                type = "text/plain"
-                            }
-                            context.startActivity(Intent.createChooser(sendIntent, "مشاركة الواجهة"))
-                            showShareDialog = false
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("مشاركة ملف التخصيص كملف JSON")
-                    }
-
-                    Button(
-                        onClick = {
-                            showShareDialog = false
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar("⌚ جاري البحث عن الساعات المتصلة بالبلوتوث لمزامنة الواجهة...")
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF81C784)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("إرسال فوري إلى Wear OS (Bluetooth)", color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showShareDialog = false }) {
-                    Text("إلغاء")
-                }
-            }
-        )
-    }
 }
 
 // -------------------------------------------------------------
-// سطح الساعة التفاعلي (Interactive Watch Face Surface)
+// مكون شاشة العرض التفاعلية للساعة
 // -------------------------------------------------------------
 
 @Composable
@@ -1097,7 +889,7 @@ fun InteractiveWatchFaceSurface(
             .border(10.dp, Color(0xFF101216), CircleShape),
         contentAlignment = Alignment.Center
     ) {
-        // 1. رسم خلفية الصورة من الهاتف أو خلفية OLED العميقة + الخطوط
+        // 1. رسم خلفية الصورة من الهاتف أو خلفية OLED العميقة + الخطوط القابلة للحذف أو الزيادة
         Canvas(modifier = Modifier.fillMaxSize()) {
             val center = Offset(size.width / 2, size.height / 2)
             val radius = size.width / 2
@@ -1145,12 +937,12 @@ fun InteractiveWatchFaceSurface(
                     drawLine(
                         color = if (isMajor) theme.primary.copy(alpha = ticksOpacity) else ticksColor.copy(alpha = ticksOpacity * 0.6f),
                         start = Offset(
-                            center.x + startR * cos(angle).toFloat(),
-                            center.y + startR * sin(angle).toFloat()
+                            (center.x + startR * cos(angle)).toFloat(),
+                            (center.y + startR * sin(angle)).toFloat()
                         ),
                         end = Offset(
-                            center.x + endR * cos(angle).toFloat(),
-                            center.y + endR * sin(angle).toFloat()
+                            (center.x + endR * cos(angle)).toFloat(),
+                            (center.y + endR * sin(angle)).toFloat()
                         ),
                         strokeWidth = tickWidth,
                         cap = StrokeCap.Round
@@ -1159,14 +951,14 @@ fun InteractiveWatchFaceSurface(
             }
         }
 
-        // 2. رسم العقارب الفخمة فوق الخلفية والخطوط
+        // 2. رسم العقارب الفاخرة بدقة متناهية
         Canvas(modifier = Modifier.fillMaxSize()) {
             val center = Offset(size.width / 2, size.height / 2)
             val radius = size.width / 2
 
-            val hourAngle = ((hour % 12) + minute / 60f) * 30.0 * (Math.PI / 180.0) - Math.PI / 2.0
-            val minAngle = (minute + second / 60f) * 6.0 * (Math.PI / 180.0) - Math.PI / 2.0
-            val secAngle = second * 6.0 * (Math.PI / 180.0) - Math.PI / 2.0
+            val hourAngle = ((hour % 12 + minute / 60.0) * 30.0 - 90.0) * (Math.PI / 180.0)
+            val minAngle = ((minute + second / 60.0) * 6.0 - 90.0) * (Math.PI / 180.0)
+            val secAngle = (second * 6.0 - 90.0) * (Math.PI / 180.0)
 
             drawWatchHandsPro(
                 style = handsStyle,
@@ -1214,25 +1006,37 @@ fun BoxScope.DraggableDeletableWidget(
     val dateText = remember { SimpleDateFormat("EEE, d", Locale.ENGLISH).format(Date()).uppercase() }
     val displayValue = if (widget.type == ComplicationType.DATE) dateText else widget.type.value
 
-    // شكل الزوايا حسب اختيار Forme
-    val cornerShape = when (shapeStyle) {
-        WidgetShapeStyle.PILL -> RoundedCornerShape(20.dp)
-        WidgetShapeStyle.CIRCLE -> CircleShape
-        WidgetShapeStyle.SQUIRCLE -> RoundedCornerShape(8.dp)
-        WidgetShapeStyle.ARCH -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 4.dp, bottomEnd = 4.dp)
-        WidgetShapeStyle.FLOWER -> RoundedCornerShape(12.dp)
-        WidgetShapeStyle.HEXAGON -> RoundedCornerShape(6.dp)
+    // شكل الزوايا والإطار الهندسي المستوحى بدقة من خيارات Forme
+    val customShape = remember(shapeStyle) {
+        when (shapeStyle) {
+            WidgetShapeStyle.SQUIRCLE -> RoundedCornerShape(10.dp)
+            WidgetShapeStyle.CIRCLE -> CircleShape
+            WidgetShapeStyle.PILL -> RoundedCornerShape(24.dp)
+            WidgetShapeStyle.ARCH -> RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 4.dp, bottomEnd = 4.dp)
+            WidgetShapeStyle.FLOWER -> RoundedCornerShape(
+                topStart = 16.dp,
+                topEnd = 4.dp,
+                bottomEnd = 16.dp,
+                bottomStart = 4.dp
+            )
+            WidgetShapeStyle.HEXAGON -> RoundedCornerShape(
+                topStart = 6.dp,
+                topEnd = 6.dp,
+                bottomStart = 6.dp,
+                bottomEnd = 6.dp
+            )
+        }
     }
 
     Surface(
-        shape = cornerShape,
+        shape = customShape,
         color = Color(0xFF141820).copy(alpha = opacity),
-        border = androidx.compose.foundation.BorderStroke(1.2.dp, theme.primary.copy(alpha = 0.7f * opacity)),
-        shadowElevation = 4.dp,
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, theme.primary.copy(alpha = 0.85f * opacity)),
+        shadowElevation = 5.dp,
         modifier = Modifier
             .align(Alignment.Center)
             .offset { IntOffset(widget.offsetX.roundToInt(), widget.offsetY.roundToInt()) }
-            // تحريك حر وسلس بالسحب باللمس في كافة أرجاء واجهة الساعة
+            // تحريك حر وسلس بالسحب باللمس في كافة أرجاء واجهة الساعة حتى أقصى الأطراف
             .pointerInput(widget.id) {
                 detectDragGestures { change, dragAmount ->
                     change.consume()
@@ -1241,14 +1045,17 @@ fun BoxScope.DraggableDeletableWidget(
             }
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+            modifier = Modifier.padding(
+                horizontal = if (shapeStyle == WidgetShapeStyle.PILL) 12.dp else 9.dp,
+                vertical = 6.dp
+            ),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(widget.type.iconEmoji, fontSize = 12.sp)
+            Text(widget.type.iconEmoji, fontSize = 13.sp)
             Spacer(modifier = Modifier.width(4.dp))
             Text(
                 displayValue,
-                fontSize = 11.sp,
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.Bold,
                 color = theme.onContainer
             )
@@ -1258,7 +1065,7 @@ fun BoxScope.DraggableDeletableWidget(
                 modifier = Modifier
                     .size(20.dp)
                     .clip(CircleShape)
-                    .background(Color.Red.copy(alpha = 0.35f))
+                    .background(Color.Red.copy(alpha = 0.45f))
                     .clickable { onDelete() },
                 contentAlignment = Alignment.Center
             ) {
@@ -1281,18 +1088,18 @@ fun BoxScope.DraggableDeletableWidget(
 fun WidgetShapeThumbnail(shapeStyle: WidgetShapeStyle, isSelected: Boolean, theme: ThemeColorOption) {
     val boxColor = if (isSelected) theme.primary else MaterialTheme.colorScheme.onSurfaceVariant
 
-    Canvas(modifier = Modifier.size(28.dp)) {
+    Canvas(modifier = Modifier.size(30.dp)) {
         val center = Offset(size.width / 2, size.height / 2)
         when (shapeStyle) {
             WidgetShapeStyle.CIRCLE -> {
-                drawCircle(color = boxColor, radius = size.width / 2.2f)
+                drawCircle(color = boxColor, radius = size.width / 2.3f)
             }
             WidgetShapeStyle.PILL -> {
                 drawRoundRect(
                     color = boxColor,
-                    topLeft = Offset(2.dp.toPx(), 6.dp.toPx()),
-                    size = Size(size.width - 4.dp.toPx(), size.height - 12.dp.toPx()),
-                    cornerRadius = CornerRadius(10.dp.toPx(), 10.dp.toPx())
+                    topLeft = Offset(2.dp.toPx(), 7.dp.toPx()),
+                    size = Size(size.width - 4.dp.toPx(), size.height - 14.dp.toPx()),
+                    cornerRadius = CornerRadius(12.dp.toPx(), 12.dp.toPx())
                 )
             }
             WidgetShapeStyle.SQUIRCLE -> {
@@ -1300,34 +1107,38 @@ fun WidgetShapeThumbnail(shapeStyle: WidgetShapeStyle, isSelected: Boolean, them
                     color = boxColor,
                     topLeft = Offset(4.dp.toPx(), 4.dp.toPx()),
                     size = Size(size.width - 8.dp.toPx(), size.height - 8.dp.toPx()),
-                    cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx())
+                    cornerRadius = CornerRadius(7.dp.toPx(), 7.dp.toPx())
                 )
             }
             WidgetShapeStyle.ARCH -> {
                 val path = Path().apply {
                     moveTo(4.dp.toPx(), size.height - 4.dp.toPx())
                     lineTo(4.dp.toPx(), 10.dp.toPx())
-                    quadraticTo(size.width / 2, 0f, size.width - 4.dp.toPx(), 10.dp.toPx())
+                    quadraticTo(size.width / 2, 2.dp.toPx(), size.width - 4.dp.toPx(), 10.dp.toPx())
                     lineTo(size.width - 4.dp.toPx(), size.height - 4.dp.toPx())
                     close()
                 }
                 drawPath(path, color = boxColor)
             }
             WidgetShapeStyle.FLOWER -> {
-                drawRoundRect(
-                    color = boxColor,
-                    topLeft = Offset(3.dp.toPx(), 3.dp.toPx()),
-                    size = Size(size.width - 6.dp.toPx(), size.height - 6.dp.toPx()),
-                    cornerRadius = CornerRadius(10.dp.toPx(), 10.dp.toPx())
-                )
-                drawCircle(color = boxColor, radius = 5.dp.toPx(), center = Offset(size.width / 2, 4.dp.toPx()))
-                drawCircle(color = boxColor, radius = 5.dp.toPx(), center = Offset(size.width / 2, size.height - 4.dp.toPx()))
+                // رسم شكل الوردة / الزاوية المائلة المتناظرة كما بالصورة
+                val path = Path().apply {
+                    val w = size.width
+                    val h = size.height
+                    moveTo(w * 0.5f, 2.dp.toPx())
+                    cubicTo(w * 0.85f, 2.dp.toPx(), w - 2.dp.toPx(), h * 0.15f, w - 2.dp.toPx(), h * 0.5f)
+                    cubicTo(w - 2.dp.toPx(), h * 0.85f, w * 0.85f, h - 2.dp.toPx(), w * 0.5f, h - 2.dp.toPx())
+                    cubicTo(w * 0.15f, h - 2.dp.toPx(), 2.dp.toPx(), h * 0.85f, 2.dp.toPx(), h * 0.5f)
+                    cubicTo(2.dp.toPx(), h * 0.15f, w * 0.15f, 2.dp.toPx(), w * 0.5f, 2.dp.toPx())
+                    close()
+                }
+                drawPath(path, color = boxColor)
             }
             WidgetShapeStyle.HEXAGON -> {
                 val path = Path().apply {
-                    val r = size.width / 2.2f
+                    val r = size.width / 2.3f
                     for (i in 0 until 6) {
-                        val a = i * Math.PI / 3
+                        val a = i * Math.PI / 3 - Math.PI / 6
                         val x = center.x + (r * cos(a)).toFloat()
                         val y = center.y + (r * sin(a)).toFloat()
                         if (i == 0) moveTo(x, y) else lineTo(x, y)
@@ -1354,10 +1165,9 @@ fun DrawScope.drawWatchHandsPro(
     baseColor: Color,
     secondColor: Color
 ) {
-    val hourLen = radius * 0.48f
-    val minLen = radius * 0.73f
-    val secLen = radius * 0.85f
-    val counterR = radius * 0.18f
+    val hourLen = radius * 0.52f
+    val minLen = radius * 0.78f
+    val secLen = radius * 0.88f
 
     when (style) {
         HandsStyle.PIXEL_BATON -> {
@@ -1365,45 +1175,45 @@ fun DrawScope.drawWatchHandsPro(
                 color = baseColor,
                 start = center,
                 end = Offset(center.x + hourLen * cos(hourAngle).toFloat(), center.y + hourLen * sin(hourAngle).toFloat()),
-                strokeWidth = 9.dp.toPx(),
-                cap = StrokeCap.Round
-            )
-            drawLine(
-                color = baseColor,
-                start = center,
-                end = Offset(center.x + minLen * cos(minAngle).toFloat(), center.y + minLen * sin(minAngle).toFloat()),
                 strokeWidth = 7.dp.toPx(),
                 cap = StrokeCap.Round
             )
             drawLine(
-                color = secondColor,
-                start = Offset(center.x - counterR * cos(secAngle).toFloat(), center.y - counterR * sin(secAngle).toFloat()),
-                end = Offset(center.x + secLen * cos(secAngle).toFloat(), center.y + secLen * sin(secAngle).toFloat()),
-                strokeWidth = 2.dp.toPx(),
-                cap = StrokeCap.Round
-            )
-            drawCircle(
-                color = secondColor,
-                radius = 4.dp.toPx(),
-                center = Offset(center.x + (secLen * 0.72f) * cos(secAngle).toFloat(), center.y + (secLen * 0.72f) * sin(secAngle).toFloat())
-            )
-        }
-
-        HandsStyle.PILOT_CHRONO -> {
-            drawLine(
-                color = baseColor,
-                start = center,
-                end = Offset(center.x + hourLen * cos(hourAngle).toFloat(), center.y + hourLen * sin(hourAngle).toFloat()),
-                strokeWidth = 8.dp.toPx(),
-                cap = StrokeCap.Square
-            )
-            drawLine(
                 color = baseColor,
                 start = center,
                 end = Offset(center.x + minLen * cos(minAngle).toFloat(), center.y + minLen * sin(minAngle).toFloat()),
-                strokeWidth = 6.dp.toPx(),
-                cap = StrokeCap.Square
+                strokeWidth = 5.dp.toPx(),
+                cap = StrokeCap.Round
             )
+            val counterR = radius * 0.20f
+            drawLine(
+                color = secondColor,
+                start = Offset(center.x - counterR * cos(secAngle).toFloat(), center.y - counterR * sin(secAngle).toFloat()),
+                end = Offset(center.x + secLen * cos(secAngle).toFloat(), center.y + secLen * sin(secAngle).toFloat()),
+                strokeWidth = 2.5.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+            drawCircle(color = secondColor, radius = 5.dp.toPx(), center = center)
+            drawCircle(color = Color.Black, radius = 2.dp.toPx(), center = center)
+        }
+
+        HandsStyle.PILOT_CHRONO -> {
+            fun drawPilotHand(angle: Double, length: Float, maxWidth: Float) {
+                val normal = angle + Math.PI / 2
+                val end = Offset(center.x + length * cos(angle).toFloat(), center.y + length * sin(angle).toFloat())
+                val p1 = Offset(center.x + maxWidth * cos(normal).toFloat(), center.y + maxWidth * sin(normal).toFloat())
+                val p2 = Offset(center.x - maxWidth * cos(normal).toFloat(), center.y - maxWidth * sin(normal).toFloat())
+                val path = Path().apply {
+                    moveTo(p1.x, p1.y)
+                    lineTo(end.x, end.y)
+                    lineTo(p2.x, p2.y)
+                    close()
+                }
+                drawPath(path, color = baseColor)
+            }
+            drawPilotHand(hourAngle, hourLen, 5.dp.toPx())
+            drawPilotHand(minAngle, minLen, 4.dp.toPx())
+
             drawLine(
                 color = secondColor,
                 start = center,
@@ -1411,6 +1221,7 @@ fun DrawScope.drawWatchHandsPro(
                 strokeWidth = 2.dp.toPx(),
                 cap = StrokeCap.Round
             )
+            drawCircle(color = secondColor, radius = 4.dp.toPx(), center = center)
         }
 
         HandsStyle.SKELETON_SPORT -> {
@@ -1419,36 +1230,39 @@ fun DrawScope.drawWatchHandsPro(
                 start = center,
                 end = Offset(center.x + hourLen * cos(hourAngle).toFloat(), center.y + hourLen * sin(hourAngle).toFloat()),
                 strokeWidth = 9.dp.toPx(),
-                cap = StrokeCap.Round
+                cap = StrokeCap.Square
             )
             drawLine(
                 color = Color.Black,
-                start = Offset(center.x + (hourLen * 0.25f) * cos(hourAngle).toFloat(), center.y + (hourLen * 0.25f) * sin(hourAngle).toFloat()),
-                end = Offset(center.x + (hourLen * 0.65f) * cos(hourAngle).toFloat(), center.y + (hourLen * 0.65f) * sin(hourAngle).toFloat()),
-                strokeWidth = 3.5.dp.toPx(),
-                cap = StrokeCap.Round
+                start = Offset(center.x + 10.dp.toPx() * cos(hourAngle).toFloat(), center.y + 10.dp.toPx() * sin(hourAngle).toFloat()),
+                end = Offset(center.x + (hourLen - 6.dp.toPx()) * cos(hourAngle).toFloat(), center.y + (hourLen - 6.dp.toPx()) * sin(hourAngle).toFloat()),
+                strokeWidth = 4.dp.toPx(),
+                cap = StrokeCap.Square
             )
+
             drawLine(
                 color = baseColor,
                 start = center,
                 end = Offset(center.x + minLen * cos(minAngle).toFloat(), center.y + minLen * sin(minAngle).toFloat()),
                 strokeWidth = 7.dp.toPx(),
-                cap = StrokeCap.Round
+                cap = StrokeCap.Square
             )
             drawLine(
                 color = Color.Black,
-                start = Offset(center.x + (minLen * 0.2f) * cos(minAngle).toFloat(), center.y + (minLen * 0.2f) * sin(minAngle).toFloat()),
-                end = Offset(center.x + (minLen * 0.70f) * cos(minAngle).toFloat(), center.y + (minLen * 0.70f) * sin(minAngle).toFloat()),
-                strokeWidth = 2.8.dp.toPx(),
-                cap = StrokeCap.Round
+                start = Offset(center.x + 10.dp.toPx() * cos(minAngle).toFloat(), center.y + 10.dp.toPx() * sin(minAngle).toFloat()),
+                end = Offset(center.x + (minLen - 6.dp.toPx()) * cos(minAngle).toFloat(), center.y + (minLen - 6.dp.toPx()) * sin(minAngle).toFloat()),
+                strokeWidth = 3.dp.toPx(),
+                cap = StrokeCap.Square
             )
+
             drawLine(
                 color = secondColor,
                 start = center,
                 end = Offset(center.x + secLen * cos(secAngle).toFloat(), center.y + secLen * sin(secAngle).toFloat()),
-                strokeWidth = 2.dp.toPx(),
-                cap = StrokeCap.Round
+                strokeWidth = 2.dp.toPx()
             )
+            drawCircle(color = baseColor, radius = 6.dp.toPx(), center = center)
+            drawCircle(color = secondColor, radius = 3.dp.toPx(), center = center)
         }
 
         HandsStyle.DIVER_SWORD -> {
@@ -1456,42 +1270,80 @@ fun DrawScope.drawWatchHandsPro(
                 color = baseColor,
                 start = center,
                 end = Offset(center.x + hourLen * cos(hourAngle).toFloat(), center.y + hourLen * sin(hourAngle).toFloat()),
-                strokeWidth = 11.dp.toPx(),
+                strokeWidth = 10.dp.toPx(),
                 cap = StrokeCap.Round
             )
+            drawLine(
+                color = secondColor.copy(alpha = 0.8f),
+                start = Offset(center.x + 8.dp.toPx() * cos(hourAngle).toFloat(), center.y + 8.dp.toPx() * sin(hourAngle).toFloat()),
+                end = Offset(center.x + (hourLen - 6.dp.toPx()) * cos(hourAngle).toFloat(), center.y + (hourLen - 6.dp.toPx()) * sin(hourAngle).toFloat()),
+                strokeWidth = 4.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+
             drawLine(
                 color = baseColor,
                 start = center,
                 end = Offset(center.x + minLen * cos(minAngle).toFloat(), center.y + minLen * sin(minAngle).toFloat()),
-                strokeWidth = 8.5.dp.toPx(),
+                strokeWidth = 8.dp.toPx(),
                 cap = StrokeCap.Round
             )
             drawLine(
-                color = secondColor,
-                start = Offset(center.x - counterR * cos(secAngle).toFloat(), center.y - counterR * sin(secAngle).toFloat()),
-                end = Offset(center.x + secLen * cos(secAngle).toFloat(), center.y + secLen * sin(secAngle).toFloat()),
-                strokeWidth = 2.5.dp.toPx(),
+                color = secondColor.copy(alpha = 0.8f),
+                start = Offset(center.x + 8.dp.toPx() * cos(minAngle).toFloat(), center.y + 8.dp.toPx() * sin(minAngle).toFloat()),
+                end = Offset(center.x + (minLen - 6.dp.toPx()) * cos(minAngle).toFloat(), center.y + (minLen - 6.dp.toPx()) * sin(minAngle).toFloat()),
+                strokeWidth = 3.dp.toPx(),
                 cap = StrokeCap.Round
             )
-        }
-
-        HandsStyle.FUTURISTIC_ARROW -> {
-            val arrowR = 12.dp.toPx()
-            val hourTarget = Offset(center.x + hourLen * cos(hourAngle).toFloat(), center.y + hourLen * sin(hourAngle).toFloat())
-            drawLine(color = baseColor, start = center, end = hourTarget, strokeWidth = 5.dp.toPx(), cap = StrokeCap.Round)
-            drawCircle(color = baseColor, radius = 5.dp.toPx(), center = hourTarget)
-
-            val minTarget = Offset(center.x + minLen * cos(minAngle).toFloat(), center.y + minLen * sin(minAngle).toFloat())
-            drawLine(color = baseColor, start = center, end = minTarget, strokeWidth = 3.5.dp.toPx(), cap = StrokeCap.Round)
-            drawCircle(color = secondColor, radius = arrowR / 2, center = minTarget)
 
             drawLine(
                 color = secondColor,
                 start = center,
                 end = Offset(center.x + secLen * cos(secAngle).toFloat(), center.y + secLen * sin(secAngle).toFloat()),
-                strokeWidth = 1.8.dp.toPx(),
+                strokeWidth = 2.dp.toPx()
+            )
+            drawCircle(
+                color = secondColor,
+                radius = 5.dp.toPx(),
+                center = Offset(center.x + (secLen * 0.7f) * cos(secAngle).toFloat(), center.y + (secLen * 0.7f) * sin(secAngle).toFloat())
+            )
+            drawCircle(color = Color.White, radius = 5.dp.toPx(), center = center)
+        }
+
+        HandsStyle.FUTURISTIC_ARROW -> {
+            drawLine(
+                color = secondColor,
+                start = center,
+                end = Offset(center.x + hourLen * cos(hourAngle).toFloat(), center.y + hourLen * sin(hourAngle).toFloat()),
+                strokeWidth = 4.dp.toPx(),
                 cap = StrokeCap.Round
             )
+            drawCircle(
+                color = secondColor,
+                radius = 7.dp.toPx(),
+                center = Offset(center.x + hourLen * cos(hourAngle).toFloat(), center.y + hourLen * sin(hourAngle).toFloat())
+            )
+
+            drawLine(
+                color = baseColor,
+                start = center,
+                end = Offset(center.x + minLen * cos(minAngle).toFloat(), center.y + minLen * sin(minAngle).toFloat()),
+                strokeWidth = 3.5.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+            drawCircle(
+                color = baseColor,
+                radius = 6.dp.toPx(),
+                center = Offset(center.x + minLen * cos(minAngle).toFloat(), center.y + minLen * sin(minAngle).toFloat())
+            )
+
+            drawLine(
+                color = secondColor,
+                start = center,
+                end = Offset(center.x + secLen * cos(secAngle).toFloat(), center.y + secLen * sin(secAngle).toFloat()),
+                strokeWidth = 1.5.dp.toPx()
+            )
+            drawCircle(color = baseColor, radius = 4.dp.toPx(), center = center)
         }
 
         HandsStyle.MINIMAL_NEEDLE -> {
@@ -1499,7 +1351,7 @@ fun DrawScope.drawWatchHandsPro(
                 color = baseColor,
                 start = center,
                 end = Offset(center.x + hourLen * cos(hourAngle).toFloat(), center.y + hourLen * sin(hourAngle).toFloat()),
-                strokeWidth = 3.dp.toPx(),
+                strokeWidth = 2.5.dp.toPx(),
                 cap = StrokeCap.Round
             )
             drawLine(
@@ -1516,15 +1368,13 @@ fun DrawScope.drawWatchHandsPro(
                 strokeWidth = 1.2.dp.toPx(),
                 cap = StrokeCap.Round
             )
+            drawCircle(color = secondColor, radius = 3.dp.toPx(), center = center)
         }
     }
-
-    drawCircle(color = Color.White.copy(alpha = 0.9f), radius = 5.5.dp.toPx(), center = center)
-    drawCircle(color = secondColor, radius = 3.dp.toPx(), center = center)
 }
 
 // -------------------------------------------------------------
-// بطاقات الأقسام
+// بطاقة قسم مخصصة بتصميم Material 3 أنيق ومريح
 // -------------------------------------------------------------
 
 @Composable
@@ -1534,14 +1384,22 @@ fun CardSection(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        ),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
@@ -1551,12 +1409,12 @@ fun CardSection(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = title,
+                    fontSize = 14.5.sp,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             content()
         }
     }
